@@ -1,0 +1,17 @@
+- name: Update and Upgrade
+  hosts: ssm_hosts
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Update apt cache and upgrade packages
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+        upgrade: dist
+
+    - name: Install locales-all
+      ansible.builtin.apt:
+        name: locales-all
+        state: present
+        
