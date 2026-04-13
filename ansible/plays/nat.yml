@@ -1,0 +1,95 @@
+- name: Configure NAT instance
+  hosts: ssm_nat
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Enable IPv4 forwarding persistently
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-nat.conf
+        content: |
+          net.ipv4.ip_forward=1
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Apply sysctl settings
+      ansible.builtin.command: sysctl --system
+      changed_when: false
+
+    - name: Install iptables persistence package
+      ansible.builtin.apt:
+        name: iptables-persistent
+        state: present
+        update_cache: yes
+
+    - name: Check MASQUERADE rule
+      ansible.builtin.command: >
+        iptables -t nat -C POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
+      register: masquerade_check
+      changed_when: false
+      failed_when: masquerade_check.rc not in [0, 1]
+
+    - name: Add MASQUERADE rule if missing
+      ansible.builtin.command: >
+        iptables -t nat -A POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
+      when: masquerade_check.rc == 1
+      register: add_masquerade
+
+    - name: Check FORWARD established rule
+      ansible.builtin.command: >
+        iptables -C FORWARD -i {{ ansible_default_ipv4.interface }} -o {{ ansible_default_ipv4.interface }}
+        -m state --state RELATED,ESTABLISHED -j ACCEPT
+      register: forward_established_check
+      changed_when: false
+      failed_when: forward_established_check.rc not in [0, 1]
+
+    - name: Add FORWARD established rule if missing
+      ansible.builtin.command: >
+        iptables -A FORWARD -i {{ ansible_default_ipv4.interface }} -o {{ ansible_default_ipv4.interface }}
+        -m state --state RELATED,ESTABLISHED -j ACCEPT
+      when: forward_established_check.rc == 1
+      register: add_forward_established
+
+    - name: Check FORWARD rule
+      ansible.builtin.command: >
+        iptables -C FORWARD -i {{ ansible_default_ipv4.interface }} -o {{ ansible_default_ipv4.interface }} -j ACCEPT
+      register: forward_check
+      changed_when: false
+      failed_when: forward_check.rc not in [0, 1]
+
+    - name: Add FORWARD rule if missing
+      ansible.builtin.command: >
+        iptables -A FORWARD -i {{ ansible_default_ipv4.interface }} -o {{ ansible_default_ipv4.interface }} -j ACCEPT
+      when: forward_check.rc == 1
+      register: add_forward
+
+    - name: Save iptables rules
+      ansible.builtin.command: netfilter-persistent save
+      when: >
+        (add_masquerade is changed) or
+        (add_forward_established is changed) or
+        (add_forward is changed)
+
+    - name: Verify IP forwarding is enabled
+      ansible.builtin.command: sysctl net.ipv4.ip_forward
+      register: ip_forward_check
+      changed_when: false
+
+    - name: Assert IP forwarding is enabled
+      ansible.builtin.assert:
+        that:
+          - "'net.ipv4.ip_forward = 1' in ip_forward_check.stdout"
+        fail_msg: "IP forwarding is NOT enabled"
+
+    - name: Check MASQUERADE rule exists
+      ansible.builtin.command: iptables -t nat -L -n
+      register: nat_table
+      changed_when: false
+
+    - name: Assert MASQUERADE rule exists
+      ansible.builtin.assert:
+        that:
+          - "'MASQUERADE' in nat_table.stdout"
+        fail_msg: "MASQUERADE rule not found"
+                
