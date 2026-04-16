@@ -1,6 +1,9 @@
-# High Availability Infrastructure 
+# Ansible Configuration Using AWS SSM
 
 ## Overview
 
-This project aims to automate the creation of high availability infrastructure using Terraform and AWS. EC2 instance configuration will be automated after creation
-using Ansible.
+<!-- This project will be using Terraform to automate the VPC deployment of a NAT instance, and 2 private instances. An S3 bucket, and IAM role will be created in order to facilitate
+secure connections without the need for EC2 pair keys, or bastion host. Ansible will then be configured to connect to the instances via SSM. I had considered using a NAT gateway
+which would be the ideal choice for an enterprise environment, but seeing as this is a lab, the costs are unjustified... minimal as they may be. I had also considered scrapping the NAT and public subnet in favor of the 3 interface endpoints you would need (ssm, ssmmessages, ec2messages), but that is only SLIGHTLY less expensive than using a NAT gateway. The most cost effective approach to this lab was the usage of an instance configured as a NAT since the costs for only 3 t2 instances, and the data for running **sudo apt update** is substantially less than the previously considered options, especially if the environment is constantly being broke/rebuilt and running updates. -->
+
+This project leverages Terraform to automate the deployment of a VPC architecture consisting of a NAT instance and two private EC2 instances. An S3 bucket and IAM role are provisioned to enable secure, keyless access via AWS Systems Manager (SSM), eliminating the need for SSH keys or a bastion host. Ansible is then configured to manage the instances through SSM. While a NAT Gateway would be the preferred solution in a production or enterprise environment, it was intentionally avoided in this lab due to cost considerations. Similarly, replacing the NAT instance with the required SSM interface endpoints (ssm, ssmmessages, ec2messages) was evaluated, but deemed less cost-effective for this use case. Given the ephemeral nature of the environment—frequent provisioning, updating, and teardown—the NAT instance approach provides the most economical balance, as it minimizes both infrastructure and data processing costs.
