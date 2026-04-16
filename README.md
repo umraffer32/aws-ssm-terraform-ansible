@@ -1,5 +1,4 @@
 # Ansible Configuration Using AWS SSM
----
 
 ## Overview
 
