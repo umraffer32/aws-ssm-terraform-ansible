@@ -1,3 +1,8 @@
+variable "ssm_host_count" {
+  type    = number
+  default = 1
+}
+
 # variable "admin_cidr" {
 #   description = "Public IP"
 #   type        = string
