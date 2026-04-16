@@ -14,9 +14,11 @@ resource "aws_instance" "nat" {
   iam_instance_profile        = "SSM-EC2"
 }
 
-resource "aws_instance" "ssm_host_1" {
+resource "aws_instance" "ssm_hosts" {
+  count = var.ssm_host_count
+
   tags = {
-    Name = "SSM-Host-1"
+    Name = "SSM-Host-${count.index + 1}"
     Role = "ssm-hosts"
   }
 
@@ -24,6 +26,6 @@ resource "aws_instance" "ssm_host_1" {
   instance_type          = "t2.micro"
   subnet_id              = aws_subnet.private.id
   vpc_security_group_ids = [aws_security_group.private_sg.id]
-  # key_name               = var.key_name
   iam_instance_profile   = "SSM-EC2"
 }
+
