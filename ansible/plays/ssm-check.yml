@@ -1,0 +1,11 @@
+- name: Confirm SSM Connectivity
+  hosts: ssm_nat,ssm_hosts
+  gather_facts: false
+
+  pre_tasks:
+    - name: Wait for SSM connection
+      wait_for_connection:
+        timeout: 300
+        sleep: 10
+        connect_timeout: 20
+ 
