@@ -6,3 +6,4 @@
 *.code-workspace
 terraform.tfvars
 outputs.txt
+test-commands.txt
