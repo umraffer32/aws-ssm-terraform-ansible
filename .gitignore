@@ -5,3 +5,4 @@
 *.key
 *.code-workspace
 terraform.tfvars
+outputs.txt
