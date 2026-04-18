@@ -1,28 +1,31 @@
+---
 - name: Update and Upgrade
   hosts: ssm_hosts,ssm_nat
+  serial: 3
   become: true
   gather_facts: false
 
-  tasks:
-    - name: Wait for stable SSM connection
+  pre_tasks:
+    - name: Wait for SSM connection
       wait_for_connection:
-        timeout: 300
-        sleep: 10
-        connect_timeout: 20
+        timeout: 180
+        sleep: 5
+        connect_timeout: 10
       register: conn
-      retries: 5
-      delay: 10
+      retries: 3
+      delay: 5
       until: conn is succeeded
 
+  tasks:
     - name: Update apt cache and upgrade packages
       ansible.builtin.apt:
         update_cache: yes
         cache_valid_time: 3600
         upgrade: dist
       register: apt_result
-      retries: 5
+      retries: 10
       delay: 10
-      until: apt_result is succeeded  
+      until: apt_result is succeeded
 
     - name: Install locales-all
       ansible.builtin.apt:
@@ -30,6 +33,5 @@
         state: present
 
     - name: Ensure en_US.UTF-8 locale exists
-      ansible.builtin.locale_gen:
-        name: en_US.UTF-8
-        state: present
+      ansible.builtin.command: locale-gen en_US.UTF-8
+      changed_when: false

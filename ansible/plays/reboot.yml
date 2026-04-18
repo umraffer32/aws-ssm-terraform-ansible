@@ -1,5 +1,6 @@
 - name: Reboot Instance(s)
   hosts: ssm_nat,ssm_hosts
+  serial: 3
   gather_facts: false
   become: true
 
@@ -8,6 +9,9 @@
       ansible.builtin.stat:
         path: /var/run/reboot-required
       register: reboot_required_file
+      retries: 10
+      delay: 10
+      until: reboot_required_file is succeeded
 
     - name: Reboot the system if required
       ansible.builtin.reboot:
