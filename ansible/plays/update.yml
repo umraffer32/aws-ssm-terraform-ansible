@@ -1,7 +1,7 @@
 ---
 - name: Update and Upgrade
   hosts: ssm_hosts,ssm_nat
-  serial: 3
+  serial: 4
   become: true
   gather_facts: false
 
@@ -12,7 +12,7 @@
         sleep: 5
         connect_timeout: 10
       register: conn
-      retries: 3
+      retries: 12
       delay: 5
       until: conn is succeeded
 
@@ -23,15 +23,15 @@
         cache_valid_time: 3600
         upgrade: dist
       register: apt_result
-      retries: 10
-      delay: 10
+      retries: 12
+      delay: 5
       until: apt_result is succeeded
 
-    - name: Install locales-all
-      ansible.builtin.apt:
-        name: locales-all
-        state: present
+    # - name: Install locales-all
+    #   ansible.builtin.apt:
+    #     name: locales-all
+    #     state: present
 
-    - name: Ensure en_US.UTF-8 locale exists
-      ansible.builtin.command: locale-gen en_US.UTF-8
-      changed_when: false
+    # - name: Ensure en_US.UTF-8 locale exists
+    #   ansible.builtin.command: locale-gen en_US.UTF-8
+    #   changed_when: false
