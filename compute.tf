@@ -4,6 +4,10 @@ resource "aws_instance" "nat" {
     Role = "ssm-nat"
   }
 
+  metadata_options {
+  http_tokens = "required"
+  }
+
   ami                         = data.aws_ami.debian.id
   instance_type               = "t2.micro"
   subnet_id                   = aws_subnet.public.id
@@ -13,6 +17,7 @@ resource "aws_instance" "nat" {
   source_dest_check           = false
   # key_name                    = var.key_name
   iam_instance_profile        = "SSM-EC2"
+  
   user_data = <<-EOF
   #!/bin/bash
   set -eux
@@ -58,20 +63,20 @@ resource "aws_instance" "ssm_hosts" {
   vpc_security_group_ids = [aws_security_group.private_sg.id]
   iam_instance_profile   = "SSM-EC2"
   # ipv6_address_count = 1
-  user_data = <<-EOF
-  #!/bin/bash
-  set -eux
+  # user_data = <<-EOF
+  # #!/bin/bash
+  # set -eux
 
-  nohup bash -c '
-  for i in {1..60}; do
-    if curl -fsS --max-time 2 https://ssm.us-west-2.amazonaws.com >/dev/null; then
-      systemctl enable amazon-ssm-agent || true
-      systemctl restart amazon-ssm-agent || true
-      exit 0
-    fi
-    sleep 5
-  done
-  ' >/var/log/ssm-recover.log 2>&1 &
-  EOF
+  # nohup bash -c '
+  # for i in {1..60}; do
+  #   if curl -fsS --max-time 2 https://ssm.us-west-2.amazonaws.com >/dev/null; then
+  #     systemctl enable amazon-ssm-agent || true
+  #     systemctl restart amazon-ssm-agent || true
+  #     exit 0
+  #   fi
+  #   sleep 5
+  # done
+  # ' >/var/log/ssm-recover.log 2>&1 &
+  # EOF
 }
 
