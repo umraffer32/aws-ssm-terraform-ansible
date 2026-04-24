@@ -1,12 +1,10 @@
-# Ansible Configuration Using AWS SSM
+# Terraform + Ansible via AWS SSM
+### VPC with NAT Instance and Private EC2 Instances
+ 
+A fully automated AWS environment built with Terraform and configured with Ansible over AWS Systems Manager (SSM) — **no open ports, no SSH keys, no bastion host**.
+ 
+This project provisions a custom VPC with public/private subnets, a **Debian 13** NAT instance bootstrapped entirely via `user_data`, and uses SSM Session Manager as the sole access method for all EC2 instances. Ansible connects through SSM using a dynamic inventory (`aws_ec2` plugin), and secrets are managed via Ansible Vault.
 
-## Overview
-
-<!-- This project will be using Terraform to automate the VPC deployment of a NAT instance, and 2 private instances. An S3 bucket, and IAM role will be created in order to facilitate
-secure connections without the need for EC2 pair keys, or bastion host. Ansible will then be configured to connect to the instances via SSM. I had considered using a NAT gateway
-which would be the ideal choice for an enterprise environment, but seeing as this is a lab, the costs are unjustified... minimal as they may be. I had also considered scrapping the NAT and public subnet in favor of the 3 interface endpoints you would need (ssm, ssmmessages, ec2messages), but that is only SLIGHTLY less expensive than using a NAT gateway. The most cost effective approach to this lab was the usage of an instance configured as a NAT since the costs for only 3 t2 instances, and the data for running **sudo apt update** is substantially less than the previously considered options, especially if the environment is constantly being broke/rebuilt and running updates. -->
-
-This project leverages Terraform to automate the deployment of a VPC architecture consisting of a NAT instance and two private EC2 instances. An S3 bucket and IAM role are provisioned to enable secure, keyless access via AWS Systems Manager (SSM), eliminating the need for SSH keys or a bastion host. Ansible is then configured to manage the instances through SSM. 
 
 ## Architectural Layout
 
