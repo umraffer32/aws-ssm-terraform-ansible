@@ -13,7 +13,7 @@ hostvars_prefix: aws_
 
 compose:
   ansible_host: instance_id
-  ansible_connection: '"amazon.aws.aws_ssm"'
+  ansible_connection: '"community.aws.aws_ssm"'
 
 keyed_groups:
   - key: aws_tags.Role
