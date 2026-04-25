@@ -91,3 +91,55 @@ Multiple layered issues:
   ```
   changed=0 on second run
   ```
+
+## aws_ec2 inventory plugin: `compose` quirks
+
+### 1. String literals in `compose` need double quoting
+
+The `compose:` block evaluates every value as a **Jinja2 expression**, not a literal string. Writing:
+
+```yaml
+compose:
+  ansible_connection: community.aws.aws_ssm
+```
+
+causes Jinja2 to parse `community.aws.aws_ssm` as a variable lookup (`community` → attribute `aws` → attribute `aws_ssm`), which doesn't exist. Ansible silently falls back to SSH and fails with `Could not resolve hostname i-xxxx: Temporary failure in name resolution`.
+
+**Fix:** wrap literals so the inner quotes survive YAML parsing into Jinja2:
+
+```yaml
+ansible_connection: '"community.aws.aws_ssm"'
+```
+
+- Outer `' '` → YAML string
+- Inner `" "` → Jinja2 string literal
+
+Applies to any literal string set via `compose` (e.g. `ansible_user: '"ubuntu"'`).
+
+### 2. `ansible_host: instance_id` is unnecessary for SSM
+
+`ansible_host` tells Ansible where to make a **network connection** (SSH target IP/DNS). The SSM connection plugin doesn't open a network connection from the control node — it talks to the AWS SSM API, which routes to the agent on the instance. SSM only needs the **instance ID**, which it pulls from the inventory hostname.
+
+Setting `ansible_host: instance_id` is harmless but redundant; safe to remove.
+
+### Verify
+
+Confirm hostvars resolved correctly before running a play:
+
+```bash
+# Inspect what the inventory plugin produced for a host
+ansible-inventory -i aws_ec2.yaml --host i-062e1b05ba7a0fb14
+
+# Expect to see:
+#   "ansible_connection": "community.aws.aws_ssm"
+# If you see the connection key missing or set to a weird value,
+# the quoting bug is back.
+```
+
+Then a quick connectivity check:
+
+```bash
+ansible all -i aws_ec2.yaml -m ping
+# All hosts should return "ping": "pong" via SSM,
+# with no SSH "Could not resolve hostname" errors.
+```
