@@ -253,14 +253,12 @@ ansible-inventory -i aws_ec2.yml --graph
 Expected output:
  
 ```
-@all:
-  |--@ssm_hosts:
-  |  |--i-xxxxxxxxxxxxxxxxx
-  |  |--i-xxxxxxxxxxxxxxxxx
-  |--@ssm_nat:
-  |  |--i-xxxxxxxxxxxxxxxxx
+a-ssm_nat_command = "aws ssm start-session --target i-08e56e20a52a8a0bc - NAT"
+ssm_host_ssm_commands = [
+  "aws ssm start-session --target i-0dc91b653bf8cbd53 - SSM-Host-1",
+]
 ```
- 
+
 Test connectivity across all hosts:
  
 ```bash
