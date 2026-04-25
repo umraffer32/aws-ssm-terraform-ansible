@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 ## Project Overview
 
 Terraform + Ansible lab that provisions a private AWS VPC and manages EC2 instances exclusively via AWS Systems Manager (SSM) — no SSH, no open ports, no bastion. Ansible connects over SSM using a dynamic inventory (`aws_ec2` plugin).
@@ -41,40 +43,75 @@ Ansible:    SSM proxy connection via community.aws.aws_ssm → dynamic inventory
 
 ## Common Commands
 
+**Deployment:**
 ```bash
-# Deploy everything
+# Full automated deploy (runs terraform apply + all Ansible plays)
 ./deploy.sh
 
-# Manual Terraform
-terraform init
-terraform plan
-terraform apply
+# Manual Terraform workflow
+terraform init                  # Initialize backend
+terraform validate              # Check syntax and references
+terraform plan                  # Preview changes
+terraform apply                 # Apply infrastructure
+terraform fmt -recursive        # Format all .tf files
 
-# Connect to an instance (IDs printed by terraform output)
+# Inspect state
+terraform state list
+terraform state show <resource>
+```
+
+**Connecting & Management:**
+```bash
+# Connect to an instance (outputs printed by 'terraform apply')
 aws ssm start-session --target <instance-id>
 
-# Verify inventory grouping
+# Verify NAT is working from an instance
+curl https://google.com
+cat /proc/sys/net/ipv4/ip_forward   # Should return 1
+sudo iptables -t nat -L -n -v
+```
+
+**Ansible:**
+```bash
+# Verify dynamic inventory structure
 ansible-inventory -i ansible/aws_ec2.yml --graph
+ansible-inventory -i ansible/aws_ec2.yml --host <instance-id>
 
 # Test SSM connectivity via Ansible
 ansible -i ansible/aws_ec2.yml ssm_hosts -m ping
+ansible -i ansible/aws_ec2.yml ssm_nat -m ping
 
 # Run a playbook
 ansible-playbook ansible/plays/update.yml -l ssm_hosts
+ansible-playbook ansible/plays/aws-tailscale.yml
 
-# Teardown
-./wipe.sh
+# Edit encrypted secrets
+ansible-vault edit ansible/group_vars/ssm_hosts/vault.yml
+
+# Run playbook with vault password
+ansible-playbook ansible/plays/update.yml --ask-vault-pass
+```
+
+**Teardown:**
+```bash
+./wipe.sh  # Runs 'terraform destroy --auto-approve'
 ```
 
 ## Important Constraints
 
-- **IAM profile `SSM-EC2` must exist in AWS** before `terraform apply` — it's referenced by name, not created here.
-- **S3 bucket for SSM file transfer must be in `us-west-2`** — region mismatch breaks Ansible SSM connections.
-- **Ansible Vault password** must exist at `~/.vault_pass.txt` for playbooks that use encrypted vars.
+- **IAM profile `SSM-EC2` must exist in AWS** before `terraform apply` — it's referenced by name in `compute.tf`, not created here.
+- **S3 bucket for SSM file transfer must be in `us-west-2`** — region mismatch breaks Ansible SSM connections. See PROBLEMS.md #1.
+- **Ansible Vault password** stored at `~/.vault_pass.txt` is required for playbooks using encrypted vars. Configure via `ansible.cfg` setting `vault_password_file`.
 - `boto3` and `botocore` Python packages required locally for the dynamic inventory plugin.
 - AWS SSM Session Manager plugin must be installed locally for `aws ssm start-session` and the Ansible SSM connection plugin.
-- `hostvars_prefix: aws_` is set in `aws_ec2.yml` to avoid collision with Ansible's reserved `tags` variable — do not remove it.
-- Tag `Role=ssm-hosts` on private instances is what puts them in the `ssm_hosts` inventory group, which is required for `group_vars` to apply.
+- `hostvars_prefix: aws_` in `aws_ec2.yml` avoids collision with Ansible's reserved `tags` variable — do not remove it (see PROBLEMS.md #3).
+- Tag `Role=ssm-hosts` on private instances is what puts them in the `ssm_hosts` inventory group, enabling `group_vars` to apply (see PROBLEMS.md #2).
+- Dynamic inventory `compose:` block requires double-quoted string literals: `ansible_connection: '"community.aws.aws_ssm"'` (see PROBLEMS.md #4).
+
+## Terraform State Management
+
+- `terraform.tfstate` and `terraform.tfstate.backup` are committed to repo (not `.gitignored`).
+- For team collaboration, migrate to remote state (S3 backend with DynamoDB locking) — see README "What I'd Add Next".
 
 ## Scaling
 
@@ -85,6 +122,8 @@ Change host count without touching resource definitions:
 ssm_host_count = 5
 ```
 
+Then re-run `terraform plan` and `terraform apply`.
+
 ## Secrets
 
 Sensitive values (e.g., Tailscale auth key) live in `ansible/group_vars/ssm_hosts/vault.yml`, encrypted with Ansible Vault. Edit with:
@@ -92,3 +131,12 @@ Sensitive values (e.g., Tailscale auth key) live in `ansible/group_vars/ssm_host
 ```bash
 ansible-vault edit ansible/group_vars/ssm_hosts/vault.yml
 ```
+
+## Troubleshooting
+
+See [PROBLEMS.md](./PROBLEMS.md) for detailed solutions to common issues:
+- Ansible SSM connection failures and `TargetNotConnected` errors
+- Missing NAT and S3 region mismatches
+- Missing inventory tags
+- Dynamic inventory variable conflicts
+- `compose:` quoting quirks in `aws_ec2.yml`
