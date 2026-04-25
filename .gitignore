@@ -13,3 +13,5 @@ nat.yml
 ami-update-ssmcheck.yml
 ami-nat.yml
 ami-reboot.yml
+.vault_pass*
+*.vault_pass*
