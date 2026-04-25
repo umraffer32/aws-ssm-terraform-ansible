@@ -1,96 +1,76 @@
-## Problem: Ansible SSM connection failing with `NoneType` and `TargetNotConnected`
+## Ansible SSM connection failing with `NoneType` and `TargetNotConnected`
 
-### Context
-Attempting to manage private EC2 instances using Ansible over AWS SSM with a dynamic inventory (`aws_ec2`) and no SSH/public IP access.
+### 1. Missing NAT and S3 bucket region mismatch
 
----
+Ansible `ping` module failed with `TargetNotConnected` and `expected string or bytes-like object, got 'NoneType'`. Manual SSM sessions worked, but Ansible failed. Root cause: SSM agent on instances needs to download files from S3 before running Ansible connections, but instances had no outbound internet access and the S3 bucket was in a different region.
 
-### Issue
-- Ansible `ping` module failed with:
-  - `expected string or bytes-like object, got 'NoneType'`
-  - `TargetNotConnected`
-- SSM manual sessions worked, but Ansible did not
-- S3 access initially failed
-- Dynamic inventory hosts were not behaving as expected
+**Fix:** Build a NAT instance in the public subnet with `source_dest_check = false` and iptables MASQUERADE rules to forward traffic from the private subnet. Configure instances to route outbound traffic through the NAT. Recreate the S3 bucket in the same region as the instances (`us-west-2`).
 
----
+**Verify:** Test outbound connectivity from an instance:
 
-### Root Cause
-Multiple layered issues:
+```bash
+# From the instance via SSM
+aws ssm start-session --target <instance-id>
+curl https://s3.amazonaws.com
+```
 
-1. **Missing NAT / improper outbound routing**
-   - Instances could not reach S3 → SSM file transfer failed
+Confirm Ansible can now connect:
 
-2. **SSM S3 bucket region mismatch**
-   - Bucket created in different region than instances
+```bash
+ansible -i aws_ec2.yml ssm_hosts -m ping
+```
 
-3. **Instance not in correct inventory group**
-   - Missing `Role=ssm-hosts` tag → `group_vars` not applied
+### 2. Missing `Role=ssm-hosts` tag on instances
 
-4. **Reserved variable conflict (`tags`)**
-   - AWS inventory plugin exposed `tags`, conflicting with Ansible reserved keyword
+Instances were not appearing in the `ssm_hosts` inventory group, so `group_vars/ssm_hosts` was never applied to them. The dynamic inventory plugin groups instances using the `aws_ec2.yml` keyed groups configuration, which looks for the `Role` tag.
 
-5. **Dynamic inventory vs static test mismatch**
-   - Simple inventory worked → isolated issue to inventory/plugin config
+**Fix:** Add the required tag to all SSM host instances:
 
----
+```
+Role = ssm-hosts
+```
 
-### Solution
-- Built NAT instance and disabled source/dest check
-- Ensured outbound internet access for private subnet
-- Recreated S3 bucket in correct region (`us-west-2`)
-- Added required tag:
-  ```
-  Role = ssm-hosts
-  ```
-- Updated inventory:
-  - Used `hostvars_prefix: aws_` to eliminate `tags` warning
-  - Updated keyed groups to use `aws_tags.Role`
-- Verified group membership with:
-  ```
-  ansible-inventory --graph
-  ```
-- Validated SSM + Ansible using a minimal static inventory before returning to dynamic
+Update the inventory keyed groups configuration to use the tag:
 
----
+```yaml
+keyed_groups:
+  - key: aws_tags.Role
+    prefix: ""
+```
 
-### Takeaway
-- Always isolate layers:
-  - Infra (networking)
-  - Connectivity (SSM)
-  - Tooling (Ansible)
-- If a simple/static test works but dynamic fails → problem is inventory, not infra
-- SSM with Ansible **requires S3 + outbound connectivity**
-- AWS dynamic inventory can introduce subtle variable conflicts (`tags`)
-- Tag-based grouping directly impacts variable inheritance (`group_vars`)
+**Verify:** Check that instances are correctly grouped:
 
----
+```bash
+ansible-inventory -i aws_ec2.yml --graph
+# Should show ssm_hosts group populated with instance IDs
+```
 
-### Verification
-- Confirmed SSM connectivity manually:
-  ```
-  aws ssm start-session --target <instance-id>
-  ```
+### 3. Reserved variable conflict with `tags` in dynamic inventory
 
-- Verified S3 access from instance:
-  ```
-  curl https://s3.amazonaws.com
-  ```
+The AWS `aws_ec2` inventory plugin exposes a `tags` variable for each host, which conflicts with Ansible's reserved `tags` keyword (used for play/task tagging). This caused warnings and unexpected behavior.
 
-- Confirmed correct inventory grouping:
-  ```
-  ansible-inventory -i aws_ec2.yml --graph
-  ```
+**Fix:** Set `hostvars_prefix: aws_` in the `aws_ec2.yml` inventory configuration to prefix all AWS-specific variables:
 
-- Successful Ansible execution:
-  ```
-  ansible -i aws_ec2.yml ssm_hosts -m ping
-  ```
+```yaml
+plugin: aws_ec2
+hostvars_prefix: aws_
+```
 
-- Playbook ran successfully and idempotently:
-  ```
-  changed=0 on second run
-  ```
+Now AWS tags are accessed as `aws_tags` instead of `tags`.
+
+**Verify:** Inspect hostvars for a host to confirm the prefix is applied:
+
+```bash
+ansible-inventory -i aws_ec2.yml --host <instance-id>
+# Should show "aws_tags": {...} without "tags" collision
+```
+
+Check for any remaining variable conflicts by running a play:
+
+```bash
+ansible-playbook ansible/plays/update.yml -l ssm_hosts
+# Should run without variable warnings
+```
 
 ## aws_ec2 inventory plugin: `compose` quirks
 
